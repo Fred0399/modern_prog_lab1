@@ -12,6 +12,7 @@ type Expr =
   | { kind: "var"; name: string }                         // x
   | { kind: "add"; left: Expr; right: Expr }              // e1 + e2
   | { kind: "gt"; left: Expr; right: Expr }               // e1 > e2
+  | { kind: "eq"; left: Expr; right: Expr }               // e1 == e2
   | { kind: "if"; cond: Expr; then: Expr; else: Expr };   // if c then e1 else e2
 
 type Type = "int" | "string" | "bool";
@@ -40,13 +41,27 @@ function check(e: Expr, env: Env): Type {
       expectType(check(e.right, env), "int", "right of >");
       return "bool";
 
-    // TASK 1 - T-Str:  a string literal has type string.
+    case "str":                                   // T-Str:  Gamma |- s : string
+      return "string";
 
-    // TASK 2 - T-Add:  int + int : int      string + string : string
-    //                  any other combination: throw new CheckError("...")
+    case "add": {                                 // T-Add:  int + int : int,  string + string : string
+      const l = check(e.left, env);
+      const r = check(e.right, env);
+      if (l === "int" && r === "int") return "int";
+      if (l === "string" && r === "string") return "string";
+      throw new CheckError("cannot add " + l + " and " + r);
+    }
 
-    // TASK 3 - T-If:   the condition must be bool, both branches must have the SAME
-    //                  type T, and the whole expression has type T.
+    case "if": {                                  // T-If:   c : bool, e1 : T, e2 : T  =>  if c then e1 else e2 : T
+      expectType(check(e.cond, env), "bool", "condition of if");
+      const t = check(e.then, env);
+      expectType(check(e.else, env), t, "else branch");
+      return t;
+    }
+
+    case "eq":                                    // T-Eq:   e1 : T, e2 : T  =>  e1 == e2 : bool
+      expectType(check(e.right, env), check(e.left, env), "right of ==");
+      return "bool";
   }
 }
 
@@ -94,3 +109,35 @@ for (const [source, expr, wanted] of programs) {
 // S2  New rule. Add  { kind: "eq"; left: Expr; right: Expr }  for  e1 == e2 .
 //     First WRITE the rule as a comment (premises above the line, conclusion below),
 //     then add the case. Should  1 == "1"  be accepted? You are the language designer.
+
+type Value = number | string | boolean;
+
+function evaluate(e: Expr, sigma: { [variable: string]: Value }): Value {
+  switch (e.kind) {
+    case "int":
+    case "str":
+      return e.value;
+    case "var":
+      return sigma[e.name];
+    case "add": {
+      const l = evaluate(e.left, sigma);
+      const r = evaluate(e.right, sigma);
+      return typeof l === "number" && typeof r === "number" ? l + r : String(l) + String(r);
+    }
+    case "gt": {
+      const l = evaluate(e.left, sigma);
+      const r = evaluate(e.right, sigma);
+      return typeof l === "number" && typeof r === "number" && l > r;
+    }
+    case "eq":
+      return evaluate(e.left, sigma) === evaluate(e.right, sigma);
+    case "if":
+      return evaluate(e.cond, sigma) === true ? evaluate(e.then, sigma) : evaluate(e.else, sigma);
+  }
+}
+
+const sigma = { x: 10, name: "Ali", age: 20 };
+for (const [source, expr] of programs.filter((_, i) => [1, 2, 4, 7, 9].includes(i + 1))) {
+  check(expr, gamma);
+  console.log("EVAL  " + source + "   =>   " + JSON.stringify(evaluate(expr, sigma)));
+}

@@ -17,28 +17,31 @@ const users = new Map<number, User>([
 // Return the user's name, or "unknown" when there is no such user.
 function userName(id: number): string {
   const u = users.get(id);
-  return u.name;                               // <- fix me
+  if (u === undefined) return "unknown";
+  return u.name;
 }
 
 // TASK 2 - two layers of absence: the user may be missing AND the email may be null.
 // Return the part of the email after "@", or "no email".
 function emailDomain(id: number): string {
   const u = users.get(id);
-  return u.email.split("@")[1];                // <- fix me
+  if (u === undefined || u.email === null) return "no email";
+  return u.email.split("@")[1];
 }
 
 // TASK 3 - typeof narrowing. An id arrives as a number (42) or as a string ("ab-7").
 //   number -> "#0042"  (pad to 4 digits)        string -> "#AB-7"  (upper case)
 function formatId(id: number | string): string {
-  return "#" + id.padStart(4, "0");            // <- fix me
+  if (typeof id === "number") return "#" + String(id).padStart(4, "0");
+  return "#" + id.toUpperCase();
 }
 
 // TASK 4 - PREDICT first: no red underline here. Is the function correct?
 // What does  label(0)  return? Run, then fix it:
 // 0 is a valid quantity, only null means "unknown".
 function label(qty: number | null): string {
-  if (qty) { return "qty=" + qty; }
-  return "unknown";
+  if (qty === null) { return "unknown"; }
+  return "qty=" + qty;
 }
 
 // ---- self-check (do not edit) -------------------------------------------------

@@ -21,7 +21,10 @@ const nonsense: JobLoose = { status: "queued", accuracy: 0.99, error: "out of me
 //   done    -> accuracy: number           failed  -> error: string
 type Job =
   | { kind: "queued" }
-  | { kind: "running"; progress: number };     // <- add the two missing cases
+  | { kind: "running"; progress: number }
+  | { kind: "done"; accuracy: number }
+  | { kind: "failed"; error: string }
+  | { kind: "cancelled"; by: string };
 
 // Compile-time tests. Do not edit them.
 // "@ts-expect-error" means: the NEXT line MUST be a type error.
@@ -43,7 +46,14 @@ function describe(job: Job): string {
   switch (job.kind) {
     case "queued":
       return "waiting";
-    // <- add the other cases
+    case "running":
+      return "running " + Math.round(job.progress * 100) + "%";
+    case "done":
+      return "done, accuracy " + job.accuracy;
+    case "failed":
+      return "FAILED: " + job.error;
+    case "cancelled":
+      return "cancelled by " + job.by;
   }
 }
 
@@ -52,6 +62,8 @@ function describe(job: Job): string {
 // Do NOT touch  describe  yet. Where does the red underline appear, and why?, add it as a comment.
 // Then handle it:  "cancelled by Leyla" , and un-comment the last check below.
 // Question: with JobLoose, how would you have found every place to update?
+// Red underline: on the return type of describe ("lacks ending return statement"), the switch no longer covers every kind.
+// With JobLoose: no error at all, only by searching every use of status by hand.
 
 // ---- self-check (do not edit) ---------------------------------------------------
 function check(name: string, f: () => unknown, expected: unknown) {
@@ -64,4 +76,4 @@ check("T2 queued", () => describe({ kind: "queued" }), "waiting");
 check("T2 running", () => describe({ kind: "running", progress: 0.4 }), "running 40%");
 check("T2 done", () => describe(ok1), "done, accuracy 0.93");
 check("T2 failed", () => describe(ok2), "FAILED: out of memory");
-// check("T3 cancelled", () => describe({ kind: "cancelled", by: "Leyla" }), "cancelled by Leyla");
+check("T3 cancelled", () => describe({ kind: "cancelled", by: "Leyla" }), "cancelled by Leyla");

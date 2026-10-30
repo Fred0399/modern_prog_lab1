@@ -15,24 +15,24 @@ const a = first([10, 20]);        // hover over  a
 const b = first(["x", "y"]);      // hover over  b
 
 // TASK 1 - last: like first, for the last element. Make it generic.
-function last(xs: unknown[]): unknown {
+function last<T>(xs: T[]): T | undefined {
   return xs.length > 0 ? xs[xs.length - 1] : undefined;
 }
 
 // TASK 2 - pair: a tuple that remembers BOTH types.   pair(1, "a")  has type  [number, string]
-function pair(x: unknown, y: unknown): unknown[] {
+function pair<A, B>(x: A, y: B): [A, B] {
   return [x, y];
 }
 
 // TASK 3 - a constraint. longest accepts anything that has a  length  (string, array, ...)
 // and returns the SAME type it was given.   Hint:  <T extends { length: number }>
-function longest(x: unknown, y: unknown): unknown {
+function longest<T extends { length: number }>(x: T, y: T): T {
   return x.length >= y.length ? x : y;
 }
 
 // TASK 4 - pluck: read one property from every object. The key must exist, and the
 // result type must follow the key.   Hint:  <T, K extends keyof T>  and the type  T[K]
-function pluck(items: unknown[], key: string): unknown[] {
+function pluck<T, K extends keyof T>(items: T[], key: K): T[K][] {
   return items.map(item => item[key]);
 }
 
