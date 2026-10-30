@@ -8,9 +8,9 @@
 // Then run it. Which tree does check() accept? Which slide of Lecture 3 showed this tree?
 
 // ---------- Grammar (EBNF): the levels are swapped ----------
-//   expr    = "if" expr "then" expr "else" expr | sum ;
-//   sum     = compare { "+" compare } ;
-//   compare = primary [ ">" primary ] ;
+//   expr    = "if" expr "then" expr "else" expr | compare;
+//   compare = sum [ ">" sum ] ;
+//   sum     = primary { "+" primary } ;
 //   primary = INT | STRING | IDENT | "(" expr ")" ;
 
 type Expr =
@@ -80,9 +80,9 @@ function parse(src: string): Expr {
 }
 
 // ---------- Parser: same functions as Lecture 3, but each one calls the wrong level ----------
-// expr = "if" expr "then" expr "else" expr | sum ;
+// expr = "if" expr "then" expr "else" expr | compare ;
 function parseExpr(p: Parser): Expr {
-  if (p.peek().kind !== "if") return parseSum(p);
+  if (p.peek().kind !== "if") return parseCompare(p);
   p.next();
   const cond = parseExpr(p);
   p.expect("then");
@@ -91,22 +91,22 @@ function parseExpr(p: Parser): Expr {
   return { kind: "if", cond, then: thenE, else: parseExpr(p) };
 }
 
-// sum = compare { "+" compare } ;
+// sum = primary { "+" primary } ;
 function parseSum(p: Parser): Expr {
-  let left = parseCompare(p);
+  let left = parsePrimary(p);
   while (p.peek().kind === "+") {
     p.next();
-    left = { kind: "add", left, right: parseCompare(p) };
+    left = { kind: "add", left, right: parsePrimary(p) };
   }
   return left;
 }
 
-// compare = primary [ ">" primary ] ;
+// compare = sum [ ">" sum ] ;
 function parseCompare(p: Parser): Expr {
-  const left = parsePrimary(p);
+  const left = parseSum(p);
   if (p.peek().kind !== ">") return left;
   p.next();
-  return { kind: "gt", left, right: parsePrimary(p) };
+  return { kind: "gt", left, right: parseSum(p) };
 }
 
 // primary = INT | STRING | IDENT | "(" expr ")" ;

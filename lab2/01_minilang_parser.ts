@@ -50,9 +50,15 @@
 type Expr =
   | { kind: "int"; value: number }
   | { kind: "str"; value: string }
+  | { kind: "bool"; value: boolean }
   | { kind: "var"; name: string }
+  | { kind: "neg"; operand: Expr }
   | { kind: "add"; left: Expr; right: Expr }
+  | { kind: "sub"; left: Expr; right: Expr }
+  | { kind: "mul"; left: Expr; right: Expr }
   | { kind: "gt"; left: Expr; right: Expr }
+  | { kind: "ge"; left: Expr; right: Expr }
+  | { kind: "eq"; left: Expr; right: Expr }
   | { kind: "if"; cond: Expr; then: Expr; else: Expr };
 
 // ---------- Lexer: token rules (slide 7) and the tokenizer loop (slide 8) ----------
@@ -64,11 +70,15 @@ const RULES: [string, RegExp][] = [
   ["ident", /[A-Za-z_]\w*/y],
   ["str",   /"[^"]*"/y],
   ["+",     /\+/y],
+  [">=",    />=/y],
   [">",     />/y],
+  ["==",    /==/y],
   ["(",     /\(/y],
   [")",     /\)/y],
+  ["-",     /-/y],
+  ["*",     /\*/y],
 ];
-const KW = new Set(["if", "then", "else"]);
+const KW = new Set(["if", "then", "else", "true", "false"]);
 
 function tokenize(src: string): Token[] {
   const out: Token[] = [];
@@ -119,7 +129,7 @@ function parse(src: string): Expr {
 }
 
 // ---------- Recursive descent: one function per grammar rule (slides 19 and 20) ----------
-// expr = "if" expr "then" expr "else" expr | compare ;
+// expr = "if" expr "then" expr "else" expr | compare ; 
 function parseExpr(p: Parser): Expr {
   if (p.peek().kind !== "if") return parseCompare(p);
   p.next();
@@ -130,30 +140,54 @@ function parseExpr(p: Parser): Expr {
   return { kind: "if", cond, then: thenE, else: parseExpr(p) };
 }
 
-// compare = sum [ ">" sum ] ;
+// compare = sum [ ( ">" | ">=" | "==" ) sum ] ;
 function parseCompare(p: Parser): Expr {
   const left = parseSum(p);
-  if (p.peek().kind !== ">") return left;
+  const op = p.peek().kind;
+  if (op !== ">" && op !== ">=" && op !== "==") return left;
   p.next();
-  return { kind: "gt", left, right: parseSum(p) };
+  const right = parseSum(p);
+  if (op === ">") return { kind: "gt", left, right };
+  if (op === ">=") return { kind: "ge", left, right };
+  return { kind: "eq", left, right };
 }
 
-// sum = primary { "+" primary } ;
+// sum = term { ( "+" | "-" ) term } ;
 function parseSum(p: Parser): Expr {
-  let left = parsePrimary(p);
-  while (p.peek().kind === "+") {
-    p.next();
-    left = { kind: "add", left, right: parsePrimary(p) };
+  let left = parseTerm(p);
+  while (p.peek().kind === "+" || p.peek().kind === "-") {
+    const op = p.next().kind;
+    const right = parseTerm(p);
+    left = op === "+" ? { kind: "add", left, right } : { kind: "sub", left, right };
   }
   return left;
 }
 
-// primary = INT | STRING | IDENT | "(" expr ")" ;
+// term = unary { "*" unary } ;
+function parseTerm(p: Parser): Expr {
+  let left = parseUnary(p);
+  while (p.peek().kind === "*") {
+    p.next();
+    left = { kind: "mul", left, right: parseUnary(p) };
+  }
+  return left;
+}
+
+// unary = "-" unary | primary ;
+function parseUnary(p: Parser): Expr {
+  if (p.peek().kind !== "-") return parsePrimary(p);
+  p.next();
+  return { kind: "neg", operand: parseUnary(p) };
+}
+
+// primary = INT | STRING | IDENT | "true" | "false" | "(" expr ")" ;
 function parsePrimary(p: Parser): Expr {
   const t = p.next();
   switch (t.kind) {
     case "int":   return { kind: "int", value: Number(t.text) };
     case "str":   return { kind: "str", value: t.text.slice(1, -1) };
+    case "true":  return { kind: "bool", value: true };
+    case "false": return { kind: "bool", value: false };
     case "ident": return { kind: "var", name: t.text };
     case "(": { const e = parseExpr(p); p.expect(")"); return e; }
     default: throw new Error(`unexpected ${t.kind} at ${t.pos}`);
@@ -175,6 +209,8 @@ function check(e: Expr, env: Env): Type {
       return "int";
     case "str": // T-Str
       return "string";
+    case "bool": // T-Bool
+      return "bool";
     case "var": { // T-Var
       const t = env[e.name];
       if (t === undefined) throw new CheckError(`unbound variable '${e.name}'`);
@@ -187,10 +223,39 @@ function check(e: Expr, env: Env): Type {
       if (l === "string" && r === "string") return "string";
       throw new CheckError(`'+' needs int + int or string + string, got ${l} + ${r}`);
     }
+    case "sub": { // T-Sub
+      const l = check(e.left, env);
+      const r = check(e.right, env);
+      if (l !== "int" || r !== "int") throw new CheckError(`'-' needs int - int, got ${l} - ${r}`);
+      return "int";
+    }
+    case "mul": { // T-Mul
+      const l = check(e.left, env);
+      const r = check(e.right, env);
+      if (l !== "int" || r !== "int") throw new CheckError(`'*' needs int * int, got ${l} * ${r}`);
+      return "int";
+    }
+    case "neg": { // T-Neg
+      const t = check(e.operand, env);
+      if (t !== "int") throw new CheckError(`unary '-' needs int, got ${t}`);
+      return "int";
+    }
     case "gt": { // T-Gt
       const l = check(e.left, env);
       const r = check(e.right, env);
       if (l !== "int" || r !== "int") throw new CheckError(`'>' needs int > int, got ${l} > ${r}`);
+      return "bool";
+    }
+    case "ge": { // T-Ge
+      const l = check(e.left, env);
+      const r = check(e.right, env);
+      if (l !== "int" || r !== "int") throw new CheckError(`'>=' needs int >= int, got ${l} >= ${r}`);
+      return "bool";
+    }
+    case "eq": { // T-Eq
+      const l = check(e.left, env);
+      const r = check(e.right, env);
+      if (l !== r) throw new CheckError(`'==' needs both sides of the same type, got ${l} == ${r}`);
       return "bool";
     }
     case "if": { // T-If
